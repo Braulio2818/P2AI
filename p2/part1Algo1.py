@@ -26,7 +26,7 @@ def print_board(board):
         print(''.join(row))
 
 #function to get the possible legal moves
-def get_legal_moves(board):
+def get_legal_moves(board): 
     legal = []
     for col in range(COLUMNS):
         if board[0][col] == EMPTY:
@@ -35,8 +35,7 @@ def get_legal_moves(board):
 
 #function to make a move on the board
 def make_move(board, col, player):
-    #we reverse the board to make it easier to find the first empty space in the column
-    #it basically puts it upside down
+    #reverse board to make it easier to find the first empty space in the column
     for row in reversed(range(ROWS)):
         if board[row][col] == EMPTY:
             board[row][col] = player
@@ -126,7 +125,6 @@ if __name__ == "__main__":
     
     algo, player, board = read_input(filename) #starts the game by reading the input file
 
-    #this is in case there is a win in the board already and the file is ran again
     if check_win(board, player):
         print(f"Player {player} has already won!")
         sys.exit(0)
@@ -138,7 +136,7 @@ if __name__ == "__main__":
     legal = get_legal_moves(board)
     print("Legal moves:", legal)
 
-    #this runs the 1st algorithm which is random
+    #running random algorithm
     if algo == "UR":
         legal_moves = get_legal_moves(board)
         if not legal_moves:
@@ -151,6 +149,9 @@ if __name__ == "__main__":
 
             if check_win(board, player):
                 print(f"Player {player} wins!")
+                print("Board:")
+                print_board(board)
+                sys.exit(0)
             else:
                 next_player = 'Y' if player == 'R' else 'R'
                 write_board_to_file(filename, algo, next_player, board)
