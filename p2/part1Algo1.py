@@ -1,6 +1,5 @@
 import sys
 import random
-import copy
 
 #game finite variables
 ROWS = 6
@@ -9,13 +8,13 @@ EMPTY = 'O'
 
 #function to read the input file and return the algorithm, player, and board
 def read_input(filename):
-    print(f"Reading input from: {filename}") 
     with open(filename, 'r') as f:
         lines = [line.strip() for line in f.readlines()]
         algorithm = lines[0]
         player = lines[1]
         board = []
-        for line in lines[2:]:
+
+        for line in lines[2:2+ROWS]:  #this ensures that only the board lines are read
             row = list(line)
             board.append(row)
     return algorithm, player, board
@@ -26,10 +25,10 @@ def print_board(board):
         print(''.join(row))
 
 #function to get the possible legal moves
-def get_legal_moves(board): 
+def legal_moves(board): 
     legal = []
     for col in range(COLUMNS):
-        if board[0][col] == EMPTY:
+        if board[0][col] == EMPTY: #if the top of the column is empty then it is a legal move
             legal.append(col)
     return legal
 
@@ -43,9 +42,9 @@ def make_move(board, col, player):
     return board
 
 #function to check if there is a win on the board
-def check_horizontal_win(board, player):
+def horizontal_win_check(board, player):
     for row in range(ROWS):
-        for col in range(COLUMNS - 3):
+        for col in range(COLUMNS - 3):  
             count = 0
             for i in range(4):
                 if board[row][col + i] == player:
@@ -56,7 +55,7 @@ def check_horizontal_win(board, player):
                 return True
     return False
 
-def check_vertical_win(board, player):
+def vertical_win_check(board, player):
     for col in range(COLUMNS):
         for row in range(ROWS - 3):
             count = 0
@@ -69,7 +68,7 @@ def check_vertical_win(board, player):
                 return True
     return False
 
-def check_diagonal_win(board, player):
+def diagonal_win_check(board, player):
     # Bottom-left to top-right
     for row in range(3, ROWS):
         for col in range(COLUMNS - 3):
@@ -96,16 +95,17 @@ def check_diagonal_win(board, player):
 
     return False
 
+#function to check if there is a win on the board, in all possible ways
 def check_win(board, player):
     return (
-        check_horizontal_win(board, player) or
-        check_vertical_win(board, player) or
-        check_diagonal_win(board, player)
+        horizontal_win_check(board, player) or
+        vertical_win_check(board, player) or
+        diagonal_win_check(board, player)
     )
 
 #function tto update the text file with the new move and prepare the other player for their turn
-def write_board_to_file(filename, algorithm, next_player, board):
-    with open(filename, 'w') as f:
+def update_board_player(filename, algorithm, next_player, board):
+    with open(filename, 'w') as f: #we are overwriting the file with the new move on the board as well as the next player and the algorithm
         f.write(f"{algorithm}\n")
         f.write(f"{next_player}\n")
         for row in board:
@@ -115,6 +115,7 @@ def write_board_to_file(filename, algorithm, next_player, board):
 
 if __name__ == "__main__":
     #checks for the correct number of arguments 
+    #needs to have 4 anything else will fail
     if(len(sys.argv) != 4):
         print("Usage: python part1Algo1.py <filename> <verbose> <param>")
         sys.exit(1)
@@ -125,36 +126,47 @@ if __name__ == "__main__":
     
     algo, player, board = read_input(filename) #starts the game by reading the input file
 
+    #if someone already won, the game won't allow another move
     if check_win(board, player):
         print(f"Player {player} has already won!")
+        print("Clear board for a new game.")
         sys.exit(0)
-    #information printed after every move
+
+    #show current game state
     print(f"Algorithm: {algo}")
     print(f"Player: {player}")
     print("Current board:")
     print_board(board)
-    legal = get_legal_moves(board)
+    print()
+
+    legal = legal_moves(board)
     print("Legal moves:", legal)
 
     #running random algorithm
     if algo == "UR":
-        legal_moves = get_legal_moves(board)
+        legal_moves = legal_moves(board)
         if not legal_moves:
             print("No legal moves available.")
             sys.exit(0)
         else:
             move = random.choice(legal_moves)
-            print(f"FINAL Move selected: {move + 1}")
+            print(f"FINAL Move selected: {move + 1}") #+1 to make it more user friendly
             board = make_move(board, move, player)
+            print()
 
+            #check if the player won after the move
             if check_win(board, player):
                 print(f"Player {player} wins!")
                 print("Board:")
                 print_board(board)
+                #update the file and exit the game
+                update_board_player(filename, algo, player, board)
                 sys.exit(0)
             else:
+                #Switch to the other player and update the file
                 next_player = 'Y' if player == 'R' else 'R'
-                write_board_to_file(filename, algo, next_player, board)
+                update_board_player(filename, algo, next_player, board)
 
+            #show the move after making the move
             print("Board after move:")
             print_board(board)
