@@ -27,13 +27,10 @@ def legal_moves(board):
     return [col for col in range(COLUMNS) if board[0][col] == EMPTY]
 
 # Make a move
+# Remove deepcopy, just return board after do_move
 def make_move(board, col, player):
-    new_board = copy.deepcopy(board)
-    for row in reversed(range(ROWS)):
-        if new_board[row][col] == EMPTY:
-            new_board[row][col] = player
-            return new_board
-    return new_board
+    do_move(board, col, player)
+    return board
 
 # Win checkers
 def horizontal_win_check(board, player):
@@ -77,17 +74,27 @@ def update_board_player(filename, algorithm, next_player, board):
             f.write(''.join(row) + '\n')
     print(f"Updated {filename} with next player {next_player}.")
 
-def simulate_random_game_verbose(board, current_player, opponent, verbose):
-    temp_board = copy.deepcopy(board)
-    turn = opponent  # Because root player already made a move
+# Do/undo move functions (in-place board edits)
+def do_move(board, col, player):
+    for row in reversed(range(ROWS)):
+        if board[row][col] == EMPTY:
+            board[row][col] = player
+            return row  # return the row where the move was placed
+    return None  # should not happen if legal_moves used properly
 
+def undo_move(board, col, row):
+    if row is not None:
+        board[row][col] = EMPTY
+
+def simulate_random_game_verbose(board, current_player, opponent, verbose):
+    turn = opponent
     moves_sequence = []
 
     while True:
-        moves = legal_moves(temp_board)
+        moves = legal_moves(board)
         if not moves:
             if verbose:
-                print("TERMINAL NODE VALUE: 0")  # Draw
+                print("TERMINAL NODE VALUE: 0")
             return 0
 
         move = random.choice(moves)
@@ -96,17 +103,18 @@ def simulate_random_game_verbose(board, current_player, opponent, verbose):
         if verbose:
             print(f"Move selected: {move + 1}")
 
-        temp_board = make_move(temp_board, move, turn)
+        row = do_move(board, move, turn)
+        if row is None:
+            continue  # Skip if move failed
 
-        if check_win(temp_board, turn):
+        if check_win(board, turn):
             if verbose:
                 print(f"TERMINAL NODE VALUE: {'1' if turn == current_player else '-1'}")
+            undo_move(board, move, row)
             return 1 if turn == current_player else -1
 
         turn = 'Y' if turn == 'R' else 'R'
 
-def make_empty_board():
-    return [[EMPTY for _ in range(COLUMNS)] for _ in range(ROWS)]
 
 def run_ur(board, player, param=None, verbose=True):
     legal = legal_moves(board)
@@ -114,47 +122,38 @@ def run_ur(board, player, param=None, verbose=True):
         if verbose:
             print("No legal moves available.")
         return board, None
-
     move = random.choice(legal)
     if verbose:
         print(f"FINAL Move selected: {move + 1}")
     board = make_move(board, move, player)
     return board, move
 
+
 def run_pmcgs(board, player, param, verbose):
     legal = legal_moves(board)
     stats = {move: {"wi": 0, "ni": 0} for move in legal}
-
     opponent = 'Y' if player == 'R' else 'R'
-
     if verbose:
         print(f"Running PMCGS with {param} simulations per move.")
         print(f"Legal moves: {legal}")
-
     for move in legal:
         if verbose:
             print(f"\nEvaluating move: {move + 1}")
         for _ in range(param):
-            sim_board = make_move(copy.deepcopy(board), move, player)
-
+            row = do_move(board, move, player)
+            if row is None:
+                continue  # Skip if move failed
             if stats[move]["ni"] == 0 and verbose:
                 print("NODE ADDED\n")
-
-            result = simulate_random_game_verbose(sim_board, player, opponent, verbose)
-
-            # Update stats
+            result = simulate_random_game_verbose(board, player, opponent, verbose)
+            undo_move(board, move, row)
             stats[move]["wi"] += result
             stats[move]["ni"] += 1
-
             if verbose:
                 print("Updated values:")
                 print(f"wi: {stats[move]['wi']}")
                 print(f"ni: {stats[move]['ni']} \n")
-
-    # Final move selection based on highest wi
     best_move = max(legal, key=lambda m: stats[m]["wi"])
-    best_value = stats[best_move]["wi"]
-
     if verbose:
         print("\nColumn values (wi/ni):")
         for col in range(7):
@@ -163,68 +162,48 @@ def run_pmcgs(board, player, param, verbose):
                 print(f"Column {col + 1}: {avg:.2f}")
             else:
                 print(f"Column {col + 1}: Null")
-
         print(f"\nFINAL Move selected: {best_move + 1}")
-
     return make_move(board, best_move, player), best_move
 
 def run_uct(board, player, param, verbose):
-    import math
     legal = legal_moves(board)
     stats = {move: {"wins": 0, "plays": 0} for move in legal}
     opponent = 'Y' if player == 'R' else 'R'
     C = math.sqrt(2)
-
     if verbose:
         print(f"Running UCT with {param} simulations total.")
         print(f"Legal moves: {legal}")
-
     for sim in range(param):
         total_plays = sum(stats[move]["plays"] for move in legal) + 1
-
         ucb_scores = {}
         for move in legal:
             w = stats[move]["wins"]
             n = stats[move]["plays"]
-            if n == 0:
-                ucb_scores[move] = float("inf")
-            else:
-                ucb_scores[move] = (w / n) + C * math.sqrt(math.log(total_plays) / n)
-
-        # Select move using UCB (maximize for R, minimize for Y)
-        if player == 'R':
-            best_move = max(legal, key=lambda m: ucb_scores[m])
-        else:
-            best_move = min(legal, key=lambda m: ucb_scores[m])
-
-        # Verbose output for root statistics
+            ucb_scores[move] = float("inf") if n == 0 else (w / n) + C * math.sqrt(math.log(total_plays) / n)
+        best_move = max(legal, key=lambda m: ucb_scores[m]) if player == 'R' else min(legal, key=lambda m: ucb_scores[m])
         if verbose:
             print(f"\nwi: {stats[best_move]['wins']}")
             print(f"ni: {stats[best_move]['plays']}")
             for i in range(7):
                 if i in stats:
-                    w = stats[i]["wins"]
-                    n = stats[i]["plays"]
+                    w, n = stats[i]["wins"], stats[i]["plays"]
                     v = (w / n) if n > 0 else 0.0
                     print(f"V{i+1}: {v:.2f}" if i in legal else f"V{i+1}: Null")
                 else:
                     print(f"V{i+1}: Null")
             print(f"Move selected: {best_move + 1}")
-
-        # Simulate game with verbose rollout
-        sim_board = make_move(board, best_move, player)
-        winner = simulate_random_game_verbose(sim_board, player, opponent, verbose)
-
+        row = do_move(board, best_move, player)
+        if row is None:
+            continue  # Skip if move failed
+        winner = simulate_random_game_verbose(board, player, opponent, verbose)
+        undo_move(board, best_move, row)
         stats[best_move]["plays"] += 1
         if winner == player:
             stats[best_move]["wins"] += 1
-
         if verbose:
             print("Updated values:")
             print(f"wi: {stats[best_move]['wins']}")
             print(f"ni: {stats[best_move]['plays']}")
-
-    # Final move selection based on win ratio
     final_move = None
     best_value = float('-inf') if player == 'R' else float('inf')
     for move in legal:
@@ -233,22 +212,15 @@ def run_uct(board, player, param, verbose):
         if (player == 'R' and value > best_value) or (player == 'Y' and value < best_value):
             best_value = value
             final_move = move
-
-    # Print final stats
     if verbose:
         for i in range(7):
             if i in stats:
-                w = stats[i]["wins"]
-                n = stats[i]["plays"]
-                if n > 0:
-                    v = w / n
-                    print(f"Column {i+1}: {v:.2f}")
-                else:
-                    print(f"Column {i+1}: 0.00")
+                w, n = stats[i]["wins"], stats[i]["plays"]
+                v = w / n if n > 0 else 0.0
+                print(f"Column {i+1}: {v:.2f}")
             else:
                 print(f"Column {i+1}: Null")
         print(f"FINAL Move selected: {final_move + 1}")
-
     return make_move(board, final_move, player), final_move
 
 # --- Main program ---
