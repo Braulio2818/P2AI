@@ -1,4 +1,4 @@
-from connect4 import run_ur, run_pmcgs, run_uct, check_win, legal_moves
+from connect4 import run_ur, run_pmcgs, run_uct, check_win, legal_moves, run_uct_pb, run_uct_rave
 
 # Board setup
 ROWS, COLUMNS = 6, 7
@@ -59,3 +59,46 @@ for name1 in results:
     for name2 in results[name1]:
         print(f"{results[name1][name2]:<12.2f}", end="")
     print()
+
+# --- IMPROVED UCT TEST ---
+print("Testing UCT_PB vs UCT10000...")
+uct_improved_wins = 0
+uct_baseline_wins = 0
+draws = 0
+num_games = 100
+
+for _ in range(num_games):
+    winner = play_game(run_uct_pb, run_uct, 10000, 10000)
+    if winner == 'R':
+        uct_improved_wins += 1
+    elif winner == 'Y':
+        uct_baseline_wins += 1
+    else:
+        draws += 1
+
+print("\nUCT_PB vs UCT10000 Results:")
+print(f"UCT_PB wins: {uct_improved_wins}/{num_games}")
+print(f"UCT10000 wins: {uct_baseline_wins}/{num_games}")
+print(f"Draws: {draws}/{num_games}")
+
+
+# --- IMPROVED UCT TEST 2 ---
+print("Testing UCB_Rave vs UCT10000...")
+uct_improved_wins = 0
+uct_baseline_wins = 0
+draws = 0
+num_games = 100
+
+for _ in range(num_games):
+    winner = play_game(run_uct_rave, run_uct, 10000, 10000)
+    if winner == 'R':
+        uct_improved_wins += 1
+    elif winner == 'Y':
+        uct_baseline_wins += 1
+    else:
+        draws += 1
+
+print("\nUCT_Rave vs UCT10000 Results:")
+print(f"UCT_Rave wins: {uct_improved_wins}/{num_games}")
+print(f"UCT10000 wins: {uct_baseline_wins}/{num_games}")
+print(f"Draws: {draws}/{num_games}")
