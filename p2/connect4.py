@@ -223,6 +223,91 @@ def run_uct(board, player, param, verbose):
         print(f"FINAL Move selected: {final_move + 1}")
     return make_move(board, final_move, player), final_move
 
+def run_uct_rave(board, player, param, verbose):
+    legal = legal_moves(board)
+    stats = {move: {"wins": 0, "plays": 0} for move in legal}
+    rave_stats = {move: {"wins": 0, "plays": 0} for move in legal}
+    opponent = 'Y' if player == 'R' else 'R'
+    C = math.sqrt(2)
+    beta_const = 300  # Controls RAVE influence
+
+    if verbose:
+        print(f"Running UCT-RAVE with {param} simulations.")
+
+    for sim in range(param):
+        total_plays = sum(stats[move]["plays"] for move in legal) + 1
+        ucb_scores = {}
+
+        for move in legal:
+            wi = stats[move]["wins"]
+            ni = stats[move]["plays"]
+            wi_rave = rave_stats[move]["wins"]
+            ni_rave = rave_stats[move]["plays"]
+
+            beta = ni_rave / (ni + ni_rave + 1e-6)
+            v_uct = (wi / ni) if ni > 0 else 0
+            v_rave = (wi_rave / ni_rave) if ni_rave > 0 else 0
+
+            ucb = (1 - beta) * v_uct + beta * v_rave + C * math.sqrt(math.log(total_plays) / (ni + 1e-6))
+            ucb_scores[move] = ucb
+
+        best_move = max(ucb_scores, key=ucb_scores.get)
+
+        if verbose:
+            print(f"\nSimulation {sim + 1}/{param}")
+            print(f"Best move chosen: {best_move + 1} (UCT-RAVE score: {ucb_scores[best_move]:.4f})")
+
+        row = do_move(board, best_move, player)
+        if row is None:
+            continue
+
+        moves_made = []
+        turn = opponent
+        winner = None
+
+        while True:
+            moves = legal_moves(board)
+            if not moves:
+                break
+            m = random.choice(moves)
+            moves_made.append(m)
+            r = do_move(board, m, turn)
+            if r is None:
+                continue
+            if check_win(board, turn):
+                winner = turn
+                undo_move(board, m, r)
+                break
+            undo_move(board, m, r)
+            turn = 'Y' if turn == 'R' else 'R'
+
+        undo_move(board, best_move, row)
+
+        stats[best_move]["plays"] += 1
+        if winner == player:
+            stats[best_move]["wins"] += 1
+
+        for m in set(moves_made):
+            if m in rave_stats:
+                rave_stats[m]["plays"] += 1
+                if winner == player:
+                    rave_stats[m]["wins"] += 1
+
+    final_move = max(legal, key=lambda m: stats[m]["wins"] / stats[m]["plays"] if stats[m]["plays"] > 0 else 0)
+
+    if verbose:
+        print("\nFinal RAVE-adjusted win rates per column:")
+        for col in range(COLUMNS):
+            if col in stats and stats[col]["plays"] > 0:
+                avg = stats[col]["wins"] / stats[col]["plays"]
+                print(f"Column {col + 1}: {avg:.2f}")
+            else:
+                print(f"Column {col + 1}: Null")
+        print(f"\nUCT-RAVE FINAL Move selected: {final_move + 1}")
+
+    return make_move(board, final_move, player), final_move
+
+
 # --- Main program ---
 if __name__ == "__main__":
     if len(sys.argv) != 4:
@@ -256,6 +341,8 @@ if __name__ == "__main__":
         board, move = run_pmcgs(board, player, param, verbose)
     elif algorithm == "UCT":
         board, move = run_uct(board, player, param, verbose)
+    elif algorithm == "UCT-RAVE":
+        board, move = run_uct_rave(board, player, param, verbose)
     else:
         print(f"Unknown algorithm: {algorithm}")
         sys.exit(1)
